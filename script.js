@@ -11,8 +11,7 @@
 const EMAILJS_PUBLIC_KEY  = "CFTG7TF6SeLnNpF1g";   // já preenchida
 const EMAILJS_SERVICE_ID  = "service_5rqtv5g";      // já preenchida (Gmail)
 const EMAILJS_TEMPLATE_ID = "template_6ppavgv";    // já preenchida (Email Templates)
-const RESEARCHER_EMAIL    = "chirlene.cunha@unipe.edu.br";
-const COPY_EMAIL          = "giselledantes89@gmail.com"; // recebe cópia de todo aceite
+const NOTIFY_EMAIL        = "giselledantas89@gmail.com"; // único destinatário do e-mail de notificação
 /* ========================================================================= */
 
 if (EMAILJS_PUBLIC_KEY && window.emailjs) {
@@ -101,22 +100,6 @@ function validateForm(){
 [nomeInput, emailInput].forEach(el => el.addEventListener('input', validateForm));
 consentCheck.addEventListener('change', validateForm);
 
-// ---- Escolha de entrega: e-mail ou download ----
-const deliveryRadios = document.querySelectorAll('input[name="delivery"]');
-function getDeliveryMethod(){
-  const checked = document.querySelector('input[name="delivery"]:checked');
-  return checked ? checked.value : 'email';
-}
-function updateSubmitLabel(){
-  if (!submitBtn.disabled || submitBtn.textContent.indexOf('assinado') === -1){
-    submitBtn.textContent = getDeliveryMethod() === 'download'
-      ? 'Aceitar termo e baixar PDF'
-      : 'Aceitar termo e enviar por e-mail';
-  }
-}
-deliveryRadios.forEach(r => r.addEventListener('change', updateSubmitLabel));
-updateSubmitLabel();
-
 // ---- Submit / send flow ----
 function showStatus(kind, text){
   statusMsg.className = 'status-msg show ' + kind;
@@ -131,15 +114,26 @@ function base64ToBlob(b64, mime){
 }
 
 function downloadPdf(){
-  const blob = base64ToBlob(window.TCLE_PDF_BASE64, 'application/pdf');
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = 'TCLE_Processamento_Auditivo_Central.pdf';
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  setTimeout(()=>URL.revokeObjectURL(url), 4000);
+  try {
+    if (!window.TCLE_PDF_BASE64) {
+      showStatus('error', 'Não encontrei o arquivo do PDF (pdf-data.js). Confirme que ele está na mesma pasta do index.html.');
+      return false;
+    }
+    const blob = base64ToBlob(window.TCLE_PDF_BASE64, 'application/pdf');
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'TCLE_Processamento_Auditivo_Central.pdf';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url), 4000);
+    return true;
+  } catch (err) {
+    console.error('Falha ao gerar o PDF para download:', err);
+    showStatus('error', 'Não foi possível gerar o PDF para download. Veja o console do navegador (F12) para detalhes.');
+    return false;
+  }
 }
 
 document.getElementById('downloadPdfBtn').addEventListener('click', downloadPdf);
@@ -182,16 +176,17 @@ async function listarDoBanco(){
   }
 }
 
-async function enviarEmail(destinatario, nome, cpf, email, dataHora){
+async function notificarAceite(nome, cpf, email, dataHora){
   if (!(EMAILJS_PUBLIC_KEY && EMAILJS_SERVICE_ID && EMAILJS_TEMPLATE_ID && window.emailjs)) return false;
+  // Notifica giselledantas89@gmail.com com os dados de quem assinou o termo.
+  // O PDF não vai anexado — o participante baixa o arquivo direto pelo site.
   await emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, {
-    to_name: nome,
-    to_email: destinatario,
+    to_name: 'Giselle',
+    to_email: NOTIFY_EMAIL,
     participant_name: nome,
     participant_cpf: cpf,
     participant_email: email,
-    data_hora: dataHora,
-    pdf_attachment: window.TCLE_PDF_BASE64
+    data_hora: dataHora
   });
   return true;
 }
@@ -199,10 +194,8 @@ async function enviarEmail(destinatario, nome, cpf, email, dataHora){
 submitBtn.addEventListener('click', async () => {
   if (!validateForm()) return;
 
-  const metodo = getDeliveryMethod(); // 'email' ou 'download'
-
   submitBtn.disabled = true;
-  submitBtn.textContent = metodo === 'download' ? 'Preparando download...' : 'Enviando...';
+  submitBtn.textContent = 'Preparando...';
   showStatus('info', 'Registrando seu consentimento...');
 
   const nome = nomeInput.value.trim();
@@ -211,30 +204,18 @@ submitBtn.addEventListener('click', async () => {
   const dataHora = new Date().toLocaleString('pt-BR');
   const emailjsConfigured = !!(EMAILJS_PUBLIC_KEY && EMAILJS_SERVICE_ID && EMAILJS_TEMPLATE_ID);
 
-  let sentToParticipant = false;
-  let sentToCopy = false;
+  // 1) Participante baixa o PDF direto
+  const downloaded = downloadPdf();
 
-  if (metodo === 'email'){
-    // Envia cópia para o participante e cópia para giselledantes89@gmail.com,
-    // de forma independente — uma falha na segunda não cancela a primeira.
-    if (emailjsConfigured && window.emailjs) {
-      try { sentToParticipant = await enviarEmail(email, nome, cpf, email, dataHora); }
-      catch (err) { console.error('Falha ao enviar ao participante:', err); }
-      try { sentToCopy = await enviarEmail(COPY_EMAIL, nome, cpf, email, dataHora); }
-      catch (err) { console.error('Falha ao enviar cópia:', err); }
-    }
-  } else {
-    // Download imediato — ainda assim envia uma cópia silenciosa para
-    // giselledantes89@gmail.com, se o EmailJS estiver configurado.
-    downloadPdf();
-    if (emailjsConfigured && window.emailjs) {
-      try { sentToCopy = await enviarEmail(COPY_EMAIL, nome, cpf, email, dataHora); }
-      catch (err) { console.error('Falha ao enviar cópia:', err); }
-    }
+  // 2) Notifica giselledantas89@gmail.com com nome, CPF e e-mail de quem assinou
+  let notified = false;
+  if (emailjsConfigured && window.emailjs) {
+    try { notified = await notificarAceite(nome, cpf, email, dataHora); }
+    catch (err) { console.error('Falha ao notificar:', err); }
   }
 
-  // Salva no banco de dados (window.storage) — sempre, independentemente do método
-  const savedToDb = await salvarNoBanco({ nome, cpf, email, dataHora, metodo, timestamp: Date.now() });
+  // 3) Salva no banco de dados (window.storage)
+  const savedToDb = await salvarNoBanco({ nome, cpf, email, dataHora, timestamp: Date.now() });
 
   document.getElementById('sealMeta').innerHTML = `
     <div><span>Nome</span><span>${nome}</span></div>
@@ -243,18 +224,13 @@ submitBtn.addEventListener('click', async () => {
     <div><span>Data</span><span>${dataHora}</span></div>
   `;
   document.getElementById('sealOverlay').classList.add('show');
-  document.getElementById('downloadPdfBtn').style.display = metodo === 'download' ? 'none' : '';
 
-  if (metodo === 'download'){
-    showStatus('success', 'Termo assinado e PDF baixado.' + (savedToDb ? ' Registro salvo no banco de dados.' : '') + (sentToCopy ? ' Cópia também enviada para ' + COPY_EMAIL + '.' : ''));
-  } else if (sentToParticipant && sentToCopy){
-    showStatus('success', 'Termo assinado. Cópia enviada para ' + email + ' e para ' + COPY_EMAIL + '.' + (savedToDb ? ' Registro salvo no banco de dados.' : ''));
-  } else if (sentToParticipant || sentToCopy){
-    showStatus('error', 'Termo assinado, mas apenas um dos dois e-mails foi enviado com sucesso. ' + (savedToDb ? 'O registro foi salvo no banco de dados mesmo assim.' : 'Use o botão de download para garantir a cópia do PDF.'));
-  } else if (emailjsConfigured) {
-    showStatus('error', 'Consentimento registrado' + (savedToDb ? ' e salvo no banco de dados' : '') + ', mas houve falha ao enviar os e-mails automaticamente. Use o botão de download no resumo.');
+  if (downloaded && notified){
+    showStatus('success', 'Termo assinado e PDF baixado.' + (savedToDb ? ' Registro salvo no banco de dados.' : '') + ' A responsável pela pesquisa foi notificada.');
+  } else if (downloaded){
+    showStatus(emailjsConfigured ? 'error' : 'info', 'Termo assinado e PDF baixado.' + (savedToDb ? ' Registro salvo no banco de dados.' : '') + (emailjsConfigured ? ' Porém houve falha ao notificar a responsável pela pesquisa.' : ' A notificação por e-mail ainda não está configurada.'));
   } else {
-    showStatus('info', 'Consentimento registrado' + (savedToDb ? ' e salvo no banco de dados' : '') + '. Falta configurar EMAILJS_SERVICE_ID e EMAILJS_TEMPLATE_ID no código para o envio por e-mail funcionar — use o botão de download no resumo para obter o PDF.');
+    showStatus('error', 'Consentimento registrado' + (savedToDb ? ' e salvo no banco de dados' : '') + ', mas houve um problema ao baixar o PDF. Use o botão de download no resumo.');
   }
 
   submitBtn.textContent = 'Termo já assinado';

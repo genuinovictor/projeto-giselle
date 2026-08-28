@@ -1,22 +1,15 @@
 /* =========================================================================
-   CONFIGURAÇÃO DE ENVIO DE E-MAIL (EmailJS)
+   REGISTRO DOS ACEITES (Google Sheets via Apps Script)
    -------------------------------------------------------------------------
-   Preencha os três valores abaixo com os dados da sua conta EmailJS
-   (www.emailjs.com — plano gratuito permite emails simples; para anexar o
-   PDF automaticamente, verifique o limite de tamanho de anexo do seu plano).
-   Sem esses valores preenchidos, o site funciona normalmente, mas ao aceitar
-   o termo ele apenas mostra a confirmação na tela e libera o botão de
-   download do PDF, sem enviar e-mail automático.
+   1. Crie uma planilha no Google Sheets com as colunas: Nome | CPF | Email | Data/Hora
+   2. Extensões → Apps Script → cole o código do doPost (veja instruções no chat)
+   3. Implantar → Nova implantação → App da Web → acesso "Qualquer pessoa"
+   4. Cole a URL gerada (termina em /exec) na constante abaixo.
+   Sem essa URL preenchida, o site funciona normalmente: baixa o PDF, mas
+   não registra nada em planilha nenhuma.
    ========================================================================= */
-  const EMAILJS_PUBLIC_KEY  = "CFTG7TF6SeLnNpF1g";   // já preenchida
-  const EMAILJS_SERVICE_ID  = "service_5rqtv5g";      // já preenchida (Gmail)
-  const EMAILJS_TEMPLATE_ID = "template_6ppavgv";    // já preenchida (Email Templates)
-  const NOTIFY_EMAIL        = "giselledantas89@gmail.com"; // único destinatário do e-mail de notificação
+  const SHEETS_WEBAPP_URL = "https://script.google.com/macros/s/AKfycbxO7m5jjcYDLPWQLUiMb1nsgpxuNOEwaGtQHw85M-18W3Mw9yr5FshN9DRpEfWbu4Q/exec"; // já preenchida
 /* ========================================================================= */
-
-  if (EMAILJS_PUBLIC_KEY && window.emailjs) {
-    emailjs.init({ publicKey: EMAILJS_PUBLIC_KEY });
-  }
 
   // ---- CPF mask + validation ----
   const cpfInput = document.getElementById('cpf');
@@ -176,19 +169,20 @@
     }
   }
 
-  async function notificarAceite(nome, cpf, email, dataHora){
-    if (!(EMAILJS_PUBLIC_KEY && EMAILJS_SERVICE_ID && EMAILJS_TEMPLATE_ID && window.emailjs)) return false;
-    // Notifica giselledantas89@gmail.com com os dados de quem assinou o termo.
-    // O PDF não vai anexado — o participante baixa o arquivo direto pelo site.
-    await emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, {
-      to_name: 'Giselle',
-      to_email: NOTIFY_EMAIL,
-      participant_name: nome,
-      participant_cpf: cpf,
-      participant_email: email,
-      data_hora: dataHora
-    });
-    return true;
+  async function registrarNaPlanilha(nome, cpf, email, dataHora){
+    if (!SHEETS_WEBAPP_URL) return false;
+    try {
+      await fetch(SHEETS_WEBAPP_URL, {
+        method: 'POST',
+        mode: 'no-cors', // Apps Script não retorna CORS; enviamos "às cegas" mas funciona.
+        headers: { 'Content-Type': 'text/plain' }, // evita pre-flight CORS
+        body: JSON.stringify({ nome, cpf, email, dataHora })
+      });
+      return true; // com mode:'no-cors' não dá pra ler a resposta, então assumimos sucesso se não deu erro de rede
+    } catch (err) {
+      console.error('Falha ao registrar na planilha:', err);
+      return false;
+    }
   }
 
   submitBtn.addEventListener('click', async () => {
@@ -202,19 +196,19 @@
     const cpf = cpfInput.value.trim();
     const email = emailInput.value.trim();
     const dataHora = new Date().toLocaleString('pt-BR');
-    const emailjsConfigured = !!(EMAILJS_PUBLIC_KEY && EMAILJS_SERVICE_ID && EMAILJS_TEMPLATE_ID);
+    const sheetsConfigured = !!SHEETS_WEBAPP_URL;
 
     // 1) Participante baixa o PDF direto
     const downloaded = downloadPdf();
 
-    // 2) Notifica giselledantas89@gmail.com com nome, CPF e e-mail de quem assinou
-    let notified = false;
-    if (emailjsConfigured && window.emailjs) {
-      try { notified = await notificarAceite(nome, cpf, email, dataHora); }
-      catch (err) { console.error('Falha ao notificar:', err); }
+    // 2) Registra na planilha do Google Sheets (nome, CPF, e-mail, data/hora)
+    let registered = false;
+    if (sheetsConfigured) {
+      try { registered = await registrarNaPlanilha(nome, cpf, email, dataHora); }
+      catch (err) { console.error('Falha ao registrar:', err); }
     }
 
-    // 3) Salva no banco de dados (window.storage)
+    // 3) Salva também no banco de dados local (window.storage), quando disponível
     const savedToDb = await salvarNoBanco({ nome, cpf, email, dataHora, timestamp: Date.now() });
 
     document.getElementById('sealMeta').innerHTML = `
@@ -225,10 +219,10 @@
     `;
     document.getElementById('sealOverlay').classList.add('show');
 
-    if (downloaded && notified){
-      showStatus('success', 'Termo assinado e PDF baixado.' + (savedToDb ? ' Registro salvo no banco de dados.' : '') + ' A responsável pela pesquisa foi notificada.');
+    if (downloaded && registered){
+      showStatus('success', 'Termo assinado e PDF baixado.' + (savedToDb ? ' Registro salvo no banco de dados.' : '') + ' Dados registrados na planilha.');
     } else if (downloaded){
-      showStatus(emailjsConfigured ? 'error' : 'info', 'Termo assinado e PDF baixado.' + (savedToDb ? ' Registro salvo no banco de dados.' : '') + (emailjsConfigured ? ' Porém houve falha ao notificar a responsável pela pesquisa.' : ' A notificação por e-mail ainda não está configurada.'));
+      showStatus(sheetsConfigured ? 'error' : 'info', 'Termo assinado e PDF baixado.' + (savedToDb ? ' Registro salvo no banco de dados.' : '') + (sheetsConfigured ? ' Porém houve falha ao registrar na planilha.' : ' O registro na planilha ainda não está configurado.'));
     } else {
       showStatus('error', 'Consentimento registrado' + (savedToDb ? ' e salvo no banco de dados' : '') + ', mas houve um problema ao baixar o PDF. Use o botão de download no resumo.');
     }

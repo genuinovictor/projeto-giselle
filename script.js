@@ -129,7 +129,6 @@
     }
   }
 
-  document.getElementById('downloadPdfBtn').addEventListener('click', downloadPdf);
   document.getElementById('closeSealBtn').addEventListener('click', ()=>{
     document.getElementById('sealOverlay').classList.remove('show');
   });

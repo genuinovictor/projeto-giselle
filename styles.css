@@ -114,6 +114,13 @@ p{ margin:0 0 1em; }
 
 .sidebar p.sub{ color:#B8BCD4; font-size:14.5px; margin-bottom:30px; }
 
+.cep-badge{
+  display:inline-flex; align-items:center; gap:6px;
+  font-size:11.5px; line-height:1.4; color:#C9E9E8;
+  background:rgba(53,194,193,0.12); border:1px solid rgba(53,194,193,0.35);
+  border-radius:99px; padding:6px 12px; margin:-14px 0 24px;
+}
+
 .researchers{ display:flex; flex-direction:column; gap:10px; margin-bottom:32px; }
 .researchers .r-item{
   font-size:13px; color:#D6D9EC;
@@ -283,13 +290,14 @@ button#submitBtn:active:not(:disabled){ transform:translateY(0); }
 .seal-card .meta span:first-child{ color:var(--ink-faint); }
 .seal-card .meta span:last-child{ font-weight:600; color:var(--ink); font-family:'IBM Plex Mono', monospace; font-size:12.5px; text-align:right; }
 .seal-actions{ display:flex; gap:10px; flex-direction:column; }
-.seal-actions button{
+.seal-actions button, .seal-actions a{
   padding:13px; border-radius:var(--radius-sm); font-family:inherit; font-size:14px; font-weight:600; cursor:pointer; border:1.5px solid var(--line);
   transition:transform .12s, background .15s;
+  display:block; text-align:center; text-decoration:none;
 }
-.seal-actions button:hover{ transform:translateY(-1px); }
+.seal-actions button:hover, .seal-actions a:hover{ transform:translateY(-1px); }
 .btn-download{ background:var(--ink); color:#fff; border:none; }
-.btn-download:hover{ background:#000; }
+.btn-download:hover{ background:#000; color:#fff; }
 .btn-close{ background:#fff; color:var(--ink-soft); }
 .btn-close:hover{ background:var(--paper); }
 

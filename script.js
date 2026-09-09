@@ -76,7 +76,7 @@
 
   function validateForm(){
     const nomeOk = isNomeValid(nomeInput.value);
-    const cpfOk = validarCPF(cpfInput.value);
+    const cpfOk = cpfInput.value.trim().length === 0 || validarCPF(cpfInput.value); // CPF é opcional
     const emailOk = isEmailValid(emailInput.value);
 
     document.getElementById('errNome').classList.toggle('show', nomeInput.value.length>0 && !nomeOk);

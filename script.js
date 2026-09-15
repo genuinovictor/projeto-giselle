@@ -1,260 +1,140 @@
-/* =========================================================================
-   REGISTRO DOS ACEITES (Google Sheets via Apps Script)
-   -------------------------------------------------------------------------
-   1. Crie uma planilha no Google Sheets com as colunas: Nome | CPF | Email | Data/Hora
-   2. Extensões → Apps Script → cole o código do doPost (veja instruções no chat)
-   3. Implantar → Nova implantação → App da Web → acesso "Qualquer pessoa"
-   4. Cole a URL gerada (termina em /exec) na constante abaixo.
-   Sem essa URL preenchida, o site funciona normalmente: baixa o PDF, mas
-   não registra nada em planilha nenhuma.
-   ========================================================================= */
-  const SHEETS_WEBAPP_URL = "https://script.google.com/macros/s/AKfycbxO7m5jjcYDLPWQLUiMb1nsgpxuNOEwaGtQHw85M-18W3Mw9yr5FshN9DRpEfWbu4Q/exec"; // já preenchida
-/* ========================================================================= */
+/* REGISTRO DE ACEITES — Google Sheets / Apps Script
+CONFIGURAÇÃO:
+1. Crie/abra uma planilha no Google Sheets.
+2. Extensões -> Apps Script.
+3. Cole google-apps-script.gs e salve.
+4. Implantar -> Nova implantação -> App da Web.
+   Executar como: Eu | Quem tem acesso: Qualquer pessoa
+5. Copie a URL /exec e cole em SHEETS_WEBAPP_URL abaixo.
+*/
+const SHEETS_WEBAPP_URL = "https://script.google.com/macros/s/AKfycbwbCewQGF14clDdEmqLGx12nK3UvDjTCAJUV_it00J5CvZOoJjYB0r02YiVVPtFMTo/exec";
+const TCLE_VERSION = "1.0";
+const TCLE_HASH = "dbdebda48f12014f3951bd19187c49386d334f3dd254cdfc0b40d61698dd2968";
 
-  // ---- CPF mask + validation ----
-  const cpfInput = document.getElementById('cpf');
-  cpfInput.addEventListener('input', () => {
-    let v = cpfInput.value.replace(/\D/g,'').slice(0,11);
-    if (v.length > 9) v = v.replace(/(\d{3})(\d{3})(\d{3})(\d{1,2})/, '$1.$2.$3-$4');
-    else if (v.length > 6) v = v.replace(/(\d{3})(\d{3})(\d{1,3})/, '$1.$2.$3');
-    else if (v.length > 3) v = v.replace(/(\d{3})(\d{1,3})/, '$1.$2');
-    cpfInput.value = v;
-    validateForm();
-  });
+const cpfInput = document.getElementById('cpf');
+cpfInput.addEventListener('input', () => {
+  let v = cpfInput.value.replace(/\D/g,'').slice(0,11);
+  if (v.length > 9) v = v.replace(/(\d{3})(\d{3})(\d{3})(\d{1,2})/, '$1.$2.$3-$4');
+  else if (v.length > 6) v = v.replace(/(\d{3})(\d{3})(\d{1,3})/, '$1.$2.$3');
+  else if (v.length > 3) v = v.replace(/(\d{3})(\d{1,3})/, '$1.$2');
+  cpfInput.value = v; validateForm();
+});
+function validarCPF(cpfRaw){
+  const cpf = cpfRaw.replace(/\D/g,'');
+  if (cpf.length !== 11 || /^(\d)\1{10}$/.test(cpf)) return false;
+  let sum=0; for(let i=0;i<9;i++) sum += +cpf[i]*(10-i);
+  let rev=11-(sum%11); if(rev>=10) rev=0; if(rev!==+cpf[9]) return false;
+  sum=0; for(let i=0;i<10;i++) sum += +cpf[i]*(11-i);
+  rev=11-(sum%11); if(rev>=10) rev=0; return rev===+cpf[10];
+}
 
-  function validarCPF(cpfRaw){
-    const cpf = cpfRaw.replace(/\D/g,'');
-    if (cpf.length !== 11 || /^(\d)\1{10}$/.test(cpf)) return false;
-    let sum = 0;
-    for (let i=0;i<9;i++) sum += parseInt(cpf[i],10) * (10-i);
-    let rev = 11 - (sum % 11);
-    if (rev >= 10) rev = 0;
-    if (rev !== parseInt(cpf[9],10)) return false;
-    sum = 0;
-    for (let i=0;i<10;i++) sum += parseInt(cpf[i],10) * (11-i);
-    rev = 11 - (sum % 11);
-    if (rev >= 10) rev = 0;
-    if (rev !== parseInt(cpf[10],10)) return false;
+const docScroll=document.getElementById('docScroll');
+const progressFill=document.getElementById('progressFill');
+const scrollHint=document.getElementById('scrollHint');
+const consentRow=document.getElementById('consentRow');
+const consentCheck=document.getElementById('consentCheck');
+consentCheck.disabled=false; consentRow.classList.remove('locked');
+function updateScrollProgress(){
+  const {scrollTop,scrollHeight,clientHeight}=docScroll;
+  const max=scrollHeight-clientHeight;
+  const pct=max<=0?100:Math.min(100,Math.round(scrollTop/max*100));
+  progressFill.style.width=pct+'%';
+  if(pct>=98){
+    scrollHint.classList.add('done');
+    scrollHint.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg><span>Leitura concluída</span>';
+  } else {
+    scrollHint.classList.remove('done');
+    scrollHint.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12l7 7 7-7"/></svg><span>Progresso de leitura — <b>'+pct+'%</b></span>';
+  }
+}
+docScroll.addEventListener('scroll',updateScrollProgress); updateScrollProgress();
+
+const nomeInput=document.getElementById('nome');
+const emailInput=document.getElementById('email');
+const submitBtn=document.getElementById('submitBtn');
+const statusMsg=document.getElementById('statusMsg');
+function isNomeValid(v){return v.trim().split(/\s+/).filter(Boolean).length>=2;}
+function isEmailValid(v){return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim());}
+function validateForm(){
+  const nomeOk=isNomeValid(nomeInput.value);
+  const cpfOk=cpfInput.value.trim()===''||validarCPF(cpfInput.value);
+  const emailOk=isEmailValid(emailInput.value);
+  document.getElementById('errNome').classList.toggle('show',nomeInput.value.length>0&&!nomeOk);
+  document.getElementById('errCpf').classList.toggle('show',cpfInput.value.length>0&&!cpfOk);
+  document.getElementById('errEmail').classList.toggle('show',emailInput.value.length>0&&!emailOk);
+  nomeInput.classList.toggle('invalid',nomeInput.value.length>0&&!nomeOk);
+  cpfInput.classList.toggle('invalid',cpfInput.value.length>0&&!cpfOk);
+  emailInput.classList.toggle('invalid',emailInput.value.length>0&&!emailOk);
+  submitBtn.disabled=!(nomeOk&&cpfOk&&emailOk&&consentCheck.checked);
+  return !submitBtn.disabled;
+}
+[nomeInput,emailInput].forEach(el=>el.addEventListener('input',validateForm));
+consentCheck.addEventListener('change',validateForm);
+
+function showStatus(kind,text){statusMsg.className='status-msg show '+kind;statusMsg.textContent=text;}
+function base64ToBlob(b64,mime){
+  const byteChars=atob(b64), bytes=new Uint8Array(byteChars.length);
+  for(let i=0;i<byteChars.length;i++) bytes[i]=byteChars.charCodeAt(i);
+  return new Blob([bytes],{type:mime});
+}
+function downloadPdf(){
+  try{
+    if(!window.TCLE_PDF_BASE64){showStatus('error','PDF não encontrado.');return false;}
+    const blob=base64ToBlob(window.TCLE_PDF_BASE64,'application/pdf');
+    const url=URL.createObjectURL(blob), a=document.createElement('a');
+    a.href=url; a.download='TCLE_Processamento_Auditivo_Central.pdf';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url),4000); return true;
+  }catch(err){console.error(err);showStatus('error','Não foi possível gerar o PDF.');return false;}
+}
+document.getElementById('closeSealBtn').addEventListener('click',()=>document.getElementById('sealOverlay').classList.remove('show'));
+
+async function registrarNaPlanilha(record){
+  if(!SHEETS_WEBAPP_URL || SHEETS_WEBAPP_URL.includes('COLE_AQUI')) return false;
+  try{
+    await fetch(SHEETS_WEBAPP_URL,{
+      method:'POST',mode:'no-cors',
+      headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body:JSON.stringify(record)
+    });
     return true;
+  }catch(err){console.error('Falha ao registrar consentimento:',err);return false;}
+}
+
+submitBtn.addEventListener('click',async()=>{
+  if(!validateForm()) return;
+  submitBtn.disabled=true; submitBtn.textContent='Registrando...';
+  showStatus('info','Registrando seu consentimento...');
+
+  const nome=nomeInput.value.trim(), cpf=cpfInput.value.trim(), email=emailInput.value.trim();
+  const now=new Date();
+  const dataHora=now.toLocaleString('pt-BR',{dateStyle:'short',timeStyle:'medium'});
+  const record={
+    nome, cpf, email, dataHora,
+    timestamp:now.toISOString(),
+    termo:'TCLE — Processamento Auditivo Central no Desempenho Acadêmico',
+    termoVersao:TCLE_VERSION,
+    termoHash:TCLE_HASH,
+    userAgent:navigator.userAgent,
+    origem:location.hostname
+  };
+
+  const registered=await registrarNaPlanilha(record);
+  if(!registered){
+    submitBtn.disabled=false; submitBtn.textContent='Aceitar termo e baixar PDF';
+    showStatus('error','Não foi possível registrar o consentimento. Verifique a configuração do Google Sheets e tente novamente. O PDF não será considerado como aceite até o registro ser confirmado.');
+    return;
   }
 
-  // ---- Progress bar: apenas indicativo de leitura, não bloqueia o aceite ----
-  const docScroll = document.getElementById('docScroll');
-  const progressFill = document.getElementById('progressFill');
-  const scrollHint = document.getElementById('scrollHint');
-  const consentRow = document.getElementById('consentRow');
-  const consentCheck = document.getElementById('consentCheck');
-
-  // O checkbox de aceite já começa liberado — a única exigência é preencher os dados corretamente.
-  consentCheck.disabled = false;
-  consentRow.classList.remove('locked');
-
-  function updateScrollProgress(){
-    const { scrollTop, scrollHeight, clientHeight } = docScroll;
-    const max = scrollHeight - clientHeight;
-    const pct = max <= 0 ? 100 : Math.min(100, Math.round((scrollTop / max) * 100));
-    progressFill.style.width = pct + '%';
-    if (pct >= 98){
-      scrollHint.classList.add('done');
-      scrollHint.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg><span>Leitura concluída</span>';
-    } else {
-      scrollHint.classList.remove('done');
-      scrollHint.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12l7 7 7-7"/></svg><span>Progresso de leitura — <b>' + pct + '%</b></span>';
-    }
-  }
-  docScroll.addEventListener('scroll', updateScrollProgress);
-  updateScrollProgress();
-
-  // ---- Form validation ----
-  const nomeInput = document.getElementById('nome');
-  const emailInput = document.getElementById('email');
-  const submitBtn = document.getElementById('submitBtn');
-  const statusMsg = document.getElementById('statusMsg');
-
-  function isNomeValid(v){ return v.trim().split(/\s+/).filter(Boolean).length >= 2; }
-  function isEmailValid(v){ return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim()); }
-
-  function validateForm(){
-    const nomeOk = isNomeValid(nomeInput.value);
-    const cpfOk = cpfInput.value.trim().length === 0 || validarCPF(cpfInput.value); // CPF é opcional
-    const emailOk = isEmailValid(emailInput.value);
-
-    document.getElementById('errNome').classList.toggle('show', nomeInput.value.length>0 && !nomeOk);
-    document.getElementById('errCpf').classList.toggle('show', cpfInput.value.length>0 && !cpfOk);
-    document.getElementById('errEmail').classList.toggle('show', emailInput.value.length>0 && !emailOk);
-    nomeInput.classList.toggle('invalid', nomeInput.value.length>0 && !nomeOk);
-    cpfInput.classList.toggle('invalid', cpfInput.value.length>0 && !cpfOk);
-    emailInput.classList.toggle('invalid', emailInput.value.length>0 && !emailOk);
-
-    const allOk = nomeOk && cpfOk && emailOk && consentCheck.checked;
-    submitBtn.disabled = !allOk;
-    return allOk;
-  }
-  [nomeInput, emailInput].forEach(el => el.addEventListener('input', validateForm));
-  consentCheck.addEventListener('change', validateForm);
-
-  // ---- Submit / send flow ----
-  function showStatus(kind, text){
-    statusMsg.className = 'status-msg show ' + kind;
-    statusMsg.textContent = text;
-  }
-
-  function base64ToBlob(b64, mime){
-    const byteChars = atob(b64);
-    const byteNumbers = new Array(byteChars.length);
-    for (let i=0;i<byteChars.length;i++) byteNumbers[i] = byteChars.charCodeAt(i);
-    return new Blob([new Uint8Array(byteNumbers)], { type: mime });
-  }
-
-  function downloadPdf(){
-    try {
-      if (!window.TCLE_PDF_BASE64) {
-        showStatus('error', 'Não encontrei o arquivo do PDF (pdf-data.js). Confirme que ele está na mesma pasta do index.html.');
-        return false;
-      }
-      const blob = base64ToBlob(window.TCLE_PDF_BASE64, 'application/pdf');
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'TCLE_Processamento_Auditivo_Central.pdf';
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      setTimeout(()=>URL.revokeObjectURL(url), 4000);
-      return true;
-    } catch (err) {
-      console.error('Falha ao gerar o PDF para download:', err);
-      showStatus('error', 'Não foi possível gerar o PDF para download. Veja o console do navegador (F12) para detalhes.');
-      return false;
-    }
-  }
-
-  document.getElementById('closeSealBtn').addEventListener('click', ()=>{
-    document.getElementById('sealOverlay').classList.remove('show');
-  });
-
-  // ---- Banco de dados (window.storage — disponível quando esta página roda
-  //      como artefato do Claude; se hospedada fora, essa função é ignorada
-  //      silenciosamente e o registro só existe via e-mail). ----
-  async function salvarNoBanco(record){
-    if (!window.storage) return false;
-    try {
-      const key = 'consent:' + record.cpf.replace(/\D/g,'') + ':' + Date.now();
-      await window.storage.set(key, JSON.stringify(record), true); // shared=true: visível a quem abrir este artefato
-      return true;
-    } catch (err) {
-      console.error('Falha ao salvar no banco de dados:', err);
-      return false;
-    }
-  }
-
-  async function listarDoBanco(){
-    if (!window.storage) return [];
-    try {
-      const idx = await window.storage.list('consent:', true);
-      if (!idx || !idx.keys) return [];
-      const registros = [];
-      for (const k of idx.keys){
-        try {
-          const r = await window.storage.get(k, true);
-          if (r && r.value) registros.push(JSON.parse(r.value));
-        } catch (e) { /* ignora chave corrompida */ }
-      }
-      registros.sort((a,b) => (b.timestamp||0) - (a.timestamp||0));
-      return registros;
-    } catch (err) {
-      console.error('Falha ao listar banco de dados:', err);
-      return [];
-    }
-  }
-
-  async function registrarNaPlanilha(nome, cpf, email, dataHora){
-    if (!SHEETS_WEBAPP_URL) return false;
-    try {
-      await fetch(SHEETS_WEBAPP_URL, {
-        method: 'POST',
-        mode: 'no-cors', // Apps Script não retorna CORS; enviamos "às cegas" mas funciona.
-        headers: { 'Content-Type': 'text/plain' }, // evita pre-flight CORS
-        body: JSON.stringify({ nome, cpf, email, dataHora })
-      });
-      return true; // com mode:'no-cors' não dá pra ler a resposta, então assumimos sucesso se não deu erro de rede
-    } catch (err) {
-      console.error('Falha ao registrar na planilha:', err);
-      return false;
-    }
-  }
-
-  submitBtn.addEventListener('click', async () => {
-    if (!validateForm()) return;
-
-    submitBtn.disabled = true;
-    submitBtn.textContent = 'Preparando...';
-    showStatus('info', 'Registrando seu consentimento...');
-
-    const nome = nomeInput.value.trim();
-    const cpf = cpfInput.value.trim();
-    const email = emailInput.value.trim();
-    const dataHora = new Date().toLocaleString('pt-BR');
-    const sheetsConfigured = !!SHEETS_WEBAPP_URL;
-
-    // 1) Participante baixa o PDF direto
-    const downloaded = downloadPdf();
-
-    // 2) Registra na planilha do Google Sheets (nome, CPF, e-mail, data/hora)
-    let registered = false;
-    if (sheetsConfigured) {
-      try { registered = await registrarNaPlanilha(nome, cpf, email, dataHora); }
-      catch (err) { console.error('Falha ao registrar:', err); }
-    }
-
-    // 3) Salva também no banco de dados local (window.storage), quando disponível
-    const savedToDb = await salvarNoBanco({ nome, cpf, email, dataHora, timestamp: Date.now() });
-
-    document.getElementById('sealMeta').innerHTML = `
-      <div><span>Nome</span><span>${nome}</span></div>
-      <div><span>CPF</span><span>${cpf}</span></div>
-      <div><span>E-mail</span><span>${email}</span></div>
-      <div><span>Data</span><span>${dataHora}</span></div>
-    `;
-    document.getElementById('sealOverlay').classList.add('show');
-
-    if (downloaded && registered){
-      showStatus('success', 'Termo assinado e PDF baixado.' + (savedToDb ? ' Registro salvo no banco de dados.' : '') + ' Dados registrados na planilha.');
-    } else if (downloaded){
-      showStatus(sheetsConfigured ? 'error' : 'info', 'Termo assinado e PDF baixado.' + (savedToDb ? ' Registro salvo no banco de dados.' : '') + (sheetsConfigured ? ' Porém houve falha ao registrar na planilha.' : ' O registro na planilha ainda não está configurado.'));
-    } else {
-      showStatus('error', 'Consentimento registrado' + (savedToDb ? ' e salvo no banco de dados' : '') + ', mas houve um problema ao baixar o PDF. Use o botão de download no resumo.');
-    }
-
-    submitBtn.textContent = 'Termo já assinado';
-  });
-
-  // ---- Painel do pesquisador: abra a página com ?admin=1 para ver os registros salvos ----
-  if (new URLSearchParams(location.search).get('admin') === '1'){
-    (async () => {
-      const registros = await listarDoBanco();
-      const panel = document.createElement('div');
-      panel.style.cssText = 'max-width:760px;margin:24px auto 0;padding:0 24px;';
-      const rows = registros.map(r => `
-        <tr>
-          <td>${r.nome || ''}</td>
-          <td>${r.cpf || ''}</td>
-          <td>${r.email || ''}</td>
-          <td>${r.dataHora || ''}</td>
-        </tr>`).join('');
-      panel.innerHTML = `
-        <div style="background:#fff;border:1px solid #E6E7F0;border-radius:14px;padding:20px 24px;font-family:'IBM Plex Mono',monospace;font-size:12.5px;">
-          <div style="font-weight:600;margin-bottom:12px;font-family:'Inter',sans-serif;font-size:14px;">
-            Painel — ${registros.length} consentimento(s) registrado(s)
-          </div>
-          <table style="width:100%;border-collapse:collapse;">
-            <thead><tr style="text-align:left;color:#8A8FA3;">
-              <th style="padding:6px 8px;">Nome</th><th style="padding:6px 8px;">CPF</th>
-              <th style="padding:6px 8px;">E-mail</th><th style="padding:6px 8px;">Data</th>
-            </tr></thead>
-            <tbody>${rows || '<tr><td colspan="4" style="padding:8px;">Nenhum registro ainda.</td></tr>'}</tbody>
-          </table>
-        </div>`;
-      document.querySelector('.main').prepend(panel);
-    })();
-  }
+  const downloaded=downloadPdf();
+  const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
+  document.getElementById('sealMeta').innerHTML=
+    `<div><span>Nome</span><span>${esc(nome)}</span></div>
+     <div><span>CPF</span><span>${esc(cpf||'Não informado')}</span></div>
+     <div><span>E-mail</span><span>${esc(email)}</span></div>
+     <div><span>Data</span><span>${esc(dataHora)}</span></div>
+     <div><span>Versão</span><span>${TCLE_VERSION}</span></div>`;
+  document.getElementById('sealOverlay').classList.add('show');
+  showStatus(downloaded?'success':'info',downloaded?'Consentimento registrado e PDF baixado.':'Consentimento registrado. Use o botão de download no resumo.');
+  submitBtn.textContent='Termo já assinado';
+});

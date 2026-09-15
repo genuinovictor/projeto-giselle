@@ -1,0 +1,101 @@
+PACOTE — REGISTRO DE ACEITES DO TCLE
+========================================
+
+O projeto original era um site estático. Ele foi ajustado para registrar cada aceite em uma planilha Google Sheets antes de liberar o PDF.
+
+ARQUIVOS
+--------
+index.html
+styles.css
+script.js
+google-apps-script.gs
+Planilha_Aceites_TCLE.xlsx
+LEIA-ME.txt
+
+CONFIGURAÇÃO (aprox. 5 minutos)
+--------------------------------
+1. Abra o arquivo Planilha_Aceites_TCLE.xlsx ou crie uma nova planilha no Google Sheets.
+   A aba deve se chamar "Aceites".
+
+2. No Google Sheets, vá em:
+   Extensões > Apps Script
+
+3. Apague o código existente e cole TODO o conteúdo de:
+   google-apps-script.gs
+
+4. Salve.
+
+5. Clique em "Implantar" > "Nova implantação".
+   Tipo: Aplicativo da Web
+   Executar como: Eu
+   Quem tem acesso: Qualquer pessoa
+
+6. Copie a URL que termina em /exec.
+
+7. Abra script.js e procure:
+   const SHEETS_WEBAPP_URL = "https://script.google.com/macros/s/AKfycbwbCewQGF14clDdEmqLGx12nK3UvDjTCAJUV_it00J5CvZOoJjYB0r02YiVVPtFMTo/exec";
+
+   Substitua pelo endereço /exec.
+
+8. Publique novamente o site na Vercel, substituindo os arquivos por:
+   index.html
+   styles.css
+   script.js
+
+COMO FUNCIONA
+-------------
+Participante -> formulário -> Apps Script -> Google Sheets -> PDF.
+
+O site só considera o consentimento concluído depois que o registro é enviado ao serviço.
+Depois do registro, o PDF é baixado automaticamente.
+
+CAMPOS REGISTRADOS
+------------------
+ID único
+Data/hora do servidor
+Data/hora informada pelo navegador
+Nome
+CPF (se informado)
+E-mail
+Nome do termo
+Versão do TCLE
+Hash SHA-256 do texto do termo
+User-Agent
+Origem
+Status
+
+IMPORTANTE SOBRE A PLANILHA
+---------------------------
+Google Sheets é usado aqui porque é a opção mais simples para um site estático.
+A planilha pode ser exportada para Excel (.xlsx) quando quiser.
+
+Como o CPF e o e-mail são dados pessoais, restrinja o compartilhamento da planilha
+somente às pessoas da pesquisa que realmente precisam acessar esses dados.
+
+VERSÃO DO TERMO
+----------------
+O pacote está configurado com TCLE versão 1.0.
+Se o texto do TCLE mudar de forma relevante, altere TCLE_VERSION no script.js
+e gere um novo hash para a nova versão. Não sobrescreva registros antigos.
+
+TESTE
+-----
+Depois de publicar:
+1. Abra o site.
+2. Preencha nome, CPF opcional e e-mail.
+3. Marque o aceite.
+4. Clique em "Aceitar termo e baixar PDF".
+5. Confira a aba "Aceites" no Google Sheets.
+6. Verifique se o PDF foi baixado.
+
+Se a planilha não registrar, o site não exibirá "consentimento registrado" e pedirá
+para tentar novamente.
+
+OBSERVAÇÃO
+----------
+O Apps Script não fornece o IP do visitante de forma confiável no Web App.
+Por isso o pacote não registra IP. Isso evita adicionar uma coleta de dado que não
+é necessária para o funcionamento básico do consentimento.
+
+Atenção: o armazenamento eletrônico do TCLE deve estar de acordo com o protocolo
+aprovado pelo Comitê de Ética em Pesquisa e com as regras institucionais aplicáveis.

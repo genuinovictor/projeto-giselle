@@ -137,4 +137,12 @@ submitBtn.addEventListener('click',async()=>{
   document.getElementById('sealOverlay').classList.add('show');
   showStatus(downloaded?'success':'info',downloaded?'Consentimento registrado e PDF baixado.':'Consentimento registrado. Use o botão de download no resumo.');
   submitBtn.textContent='Termo já assinado';
+
+  // Após confirmar o registro e o download do TCLE, direciona automaticamente
+  // o participante para o formulário da pesquisa. O botão continua disponível
+  // caso o navegador bloqueie a abertura automática.
+  const FORM_URL = 'https://docs.google.com/forms/d/e/1FAIpQLSepnzKz2FN6Q4koSimgKFjZ-4hp44fdjZsTrGmeCD-kpBq_NQ/viewform?usp=header';
+  setTimeout(() => {
+    window.location.href = FORM_URL;
+  }, 1800);
 });

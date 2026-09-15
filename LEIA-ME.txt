@@ -47,7 +47,7 @@ COMO FUNCIONA
 Participante -> formulário -> Apps Script -> Google Sheets -> PDF.
 
 O site só considera o consentimento concluído depois que o registro é enviado ao serviço.
-Depois do registro, o PDF é baixado automaticamente.
+Depois do registro, o PDF é baixado automaticamente e, após uma breve confirmação, o participante é direcionado automaticamente para o formulário da pesquisa.
 
 CAMPOS REGISTRADOS
 ------------------
